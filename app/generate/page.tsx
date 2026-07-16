@@ -7,6 +7,12 @@ import Link from 'next/link'
 
 export default function GeneratePage() {
   const [hasResume, setHasResume] = useState(false)
+  const [resumeContent, setResumeContent] = useState('')
+  const [editingResume, setEditingResume] = useState(false)
+  const [resumeDraft, setResumeDraft] = useState('')
+  const [savingResume, setSavingResume] = useState(false)
+  const [resumeSavedMsg, setResumeSavedMsg] = useState('')
+
   const [needsUpgrade, setNeedsUpgrade] = useState(false)
   const [jobDescription, setJobDescription] = useState('')
   const [loading, setLoading] = useState(true)
@@ -35,6 +41,7 @@ export default function GeneratePage() {
         .maybeSingle()
 
       setHasResume(!!resumeData?.content)
+      setResumeContent(resumeData?.content || '')
 
       const { count } = await supabase
         .from('generations')
@@ -60,6 +67,50 @@ export default function GeneratePage() {
 
     checkAccess()
   }, [router])
+
+  const startEditingResume = () => {
+    setResumeDraft(resumeContent)
+    setEditingResume(true)
+    setResumeSavedMsg('')
+  }
+
+  const cancelEditingResume = () => {
+    setEditingResume(false)
+    setResumeDraft('')
+  }
+
+  const saveResume = async () => {
+    if (!resumeDraft.trim()) return
+    setSavingResume(true)
+    setResumeSavedMsg('')
+
+    try {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      const { error } = await supabase
+        .from('resumes')
+        .upsert(
+          { user_id: user.id, content: resumeDraft },
+          { onConflict: 'user_id' }
+        )
+
+      if (error) {
+        setResumeSavedMsg('保存に失敗しました。もう一度お試しください。')
+      } else {
+        setResumeContent(resumeDraft)
+        setHasResume(true)
+        setEditingResume(false)
+        setResumeSavedMsg('履歴書を更新しました。')
+        setTimeout(() => setResumeSavedMsg(''), 3000)
+      }
+    } catch (err) {
+      setResumeSavedMsg('保存に失敗しました。もう一度お試しください。')
+    }
+
+    setSavingResume(false)
+  }
 
   const handleGenerate = async () => {
     setGenerating(true)
@@ -175,6 +226,52 @@ export default function GeneratePage() {
           Paste the job description below, then click Generate.
         </p>
 
+        {/* Resume status / replace section */}
+        <div className="mb-6 border border-gray-200 rounded-md p-4 bg-gray-50">
+          {!editingResume ? (
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-gray-700">✓ Resume saved</span>
+              <button
+                onClick={startEditingResume}
+                className="text-xs border border-gray-300 rounded-md px-3 py-1 hover:bg-white transition bg-white"
+              >
+                Replace Resume
+              </button>
+            </div>
+          ) : (
+            <div>
+              <p className="text-sm text-gray-600 mb-2">
+                Paste your new resume content below to replace the current one.
+              </p>
+              <textarea
+                value={resumeDraft}
+                onChange={(e) => setResumeDraft(e.target.value)}
+                rows={10}
+                className="w-full border border-gray-300 rounded-md p-3 text-sm font-mono mb-3"
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={saveResume}
+                  disabled={savingResume || !resumeDraft.trim()}
+                  className="bg-black text-white rounded-md px-4 py-1.5 text-sm hover:bg-gray-800 transition disabled:opacity-50"
+                >
+                  {savingResume ? 'Saving...' : 'Save Resume'}
+                </button>
+                <button
+                  onClick={cancelEditingResume}
+                  disabled={savingResume}
+                  className="border border-gray-300 rounded-md px-4 py-1.5 text-sm hover:bg-white transition"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+          {resumeSavedMsg && (
+            <p className="text-xs text-green-700 mt-2">{resumeSavedMsg}</p>
+          )}
+        </div>
+
         <textarea
           value={jobDescription}
           onChange={(e) => setJobDescription(e.target.value)}
@@ -214,7 +311,12 @@ export default function GeneratePage() {
                 </button>
               </div>
             </div>
-            <pre className="whitespace-pre-wrap text-sm bg-gray-50 p-4 rounded-md border border-gray-200">{optimizedResume}</pre>
+            <textarea
+              value={optimizedResume}
+              onChange={(e) => setOptimizedResume(e.target.value)}
+              rows={16}
+              className="w-full whitespace-pre-wrap text-sm bg-gray-50 p-4 rounded-md border border-gray-200 font-mono"
+            />
           </div>
         )}
 
@@ -237,7 +339,12 @@ export default function GeneratePage() {
                 </button>
               </div>
             </div>
-            <pre className="whitespace-pre-wrap text-sm bg-gray-50 p-4 rounded-md border border-gray-200">{coverLetter}</pre>
+            <textarea
+              value={coverLetter}
+              onChange={(e) => setCoverLetter(e.target.value)}
+              rows={12}
+              className="w-full whitespace-pre-wrap text-sm bg-gray-50 p-4 rounded-md border border-gray-200 font-mono"
+            />
           </div>
         )}
       </div>
