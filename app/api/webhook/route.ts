@@ -10,46 +10,66 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-async function markUserAsPaid(email: string | null | undefined, customerId: string | null | undefined) {
-  console.log('markUserAsPaid called with email:', email)
+const PRICE_SINGLE = process.env.STRIPE_PRICE_SINGLE!
+const PRICE_PACK = process.env.STRIPE_PRICE_PACK!
+const PRICE_UNLIMITED = process.env.STRIPE_PRICE_UNLIMITED!
 
-  if (!email) {
-    console.log('No email found, skipping.')
-    return
-  }
+async function findUserIdByEmail(email: string | null | undefined): Promise<string | null> {
+  if (!email) return null
 
-  const { data: userData, error: listError } = await supabaseAdmin.auth.admin.listUsers()
-
-  if (listError) {
-    console.error('Error listing users:', listError)
-    return
+  const { data: userData, error } = await supabaseAdmin.auth.admin.listUsers()
+  if (error) {
+    console.error('Error listing users:', error)
+    return null
   }
 
   const matchedUser = userData?.users.find(u => u.email === email)
+  return matchedUser?.id || null
+}
 
-  if (!matchedUser) {
-    console.log('No matching user found for email:', email)
-    return
-  }
+async function addCredits(userId: string, amount: number, customerId: string | null) {
+  const { data: existing } = await supabaseAdmin
+    .from('credits')
+    .select('remaining_generations')
+    .eq('user_id', userId)
+    .maybeSingle()
 
-  console.log('Matched user id:', matchedUser.id)
+  const newTotal = (existing?.remaining_generations ?? 0) + amount
 
-  const { error: upsertError } = await supabaseAdmin
-    .from('subscriptions')
+  const { error } = await supabaseAdmin
+    .from('credits')
     .upsert(
       {
-        user_id: matchedUser.id,
-        stripe_customer_id: customerId || null,
-        plan: 'paid',
-        status: 'active',
+        user_id: userId,
+        remaining_generations: newTotal,
+        stripe_customer_id: customerId,
       },
       { onConflict: 'user_id' }
     )
 
-  if (upsertError) {
-    console.error('Error upserting subscription:', upsertError)
+  if (error) {
+    console.error('Error adding credits:', error)
   } else {
-    console.log('Subscription upserted successfully for user:', matchedUser.id)
+    console.log(`Added ${amount} credits to user ${userId}, new total: ${newTotal}`)
+  }
+}
+
+async function setUnlimited(userId: string, customerId: string | null, value: boolean) {
+  const { error } = await supabaseAdmin
+    .from('credits')
+    .upsert(
+      {
+        user_id: userId,
+        is_unlimited: value,
+        stripe_customer_id: customerId,
+      },
+      { onConflict: 'user_id' }
+    )
+
+  if (error) {
+    console.error('Error setting unlimited status:', error)
+  } else {
+    console.log(`Set is_unlimited=${value} for user ${userId}`)
   }
 }
 
@@ -70,14 +90,45 @@ export async function POST(request: Request) {
 
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object as Stripe.Checkout.Session
-    await markUserAsPaid(session.customer_details?.email, session.customer as string)
+    const email = session.customer_details?.email
+    const customerId = (session.customer as string) || null
+
+    const userId = await findUserIdByEmail(email)
+    if (!userId) {
+      console.log('No matching user found for email:', email)
+      return NextResponse.json({ received: true })
+    }
+
+    const lineItems = await stripe.checkout.sessions.listLineItems(session.id, {
+      expand: ['data.price'],
+    })
+
+    const priceId = lineItems.data[0]?.price?.id
+
+    if (priceId === PRICE_SINGLE) {
+      await addCredits(userId, 1, customerId)
+    } else if (priceId === PRICE_PACK) {
+      await addCredits(userId, 5, customerId)
+    } else if (priceId === PRICE_UNLIMITED) {
+      await setUnlimited(userId, customerId, true)
+    } else {
+      console.log('Unrecognized price ID:', priceId)
+    }
   }
 
-  if (event.type === 'invoice.payment_succeeded' || event.type === 'invoice_payment.paid') {
-    const invoice = event.data.object as any
-    const email = invoice.customer_email as string | undefined
-    const customerId = invoice.customer as string | undefined
-    await markUserAsPaid(email, customerId)
+  if (event.type === 'customer.subscription.deleted') {
+    const subscription = event.data.object as Stripe.Subscription
+    const customerId = subscription.customer as string
+
+    const { data: creditsRow } = await supabaseAdmin
+      .from('credits')
+      .select('user_id')
+      .eq('stripe_customer_id', customerId)
+      .maybeSingle()
+
+    if (creditsRow?.user_id) {
+      await setUnlimited(creditsRow.user_id, customerId, false)
+    }
   }
 
   return NextResponse.json({ received: true })
