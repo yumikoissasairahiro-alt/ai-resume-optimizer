@@ -97,16 +97,16 @@ export default function GeneratePage() {
         )
 
       if (error) {
-        setResumeSavedMsg('保存に失敗しました。もう一度お試しください。')
+        setResumeSavedMsg('Failed to save. Please try again')
       } else {
         setResumeContent(resumeDraft)
         setHasResume(true)
         setEditingResume(false)
-        setResumeSavedMsg('履歴書を更新しました。')
+        setResumeSavedMsg('Resume updated')
         setTimeout(() => setResumeSavedMsg(''), 3000)
       }
     } catch (err) {
-      setResumeSavedMsg('保存に失敗しました。もう一度お試しください。')
+      setResumeSavedMsg('Failed to save. Please try again.')
     }
 
     setSavingResume(false)
