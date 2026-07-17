@@ -28,24 +28,29 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'No resume found' }, { status: 400 })
   }
 
-  const { count } = await supabase
+const { count } = await supabase
     .from('generations')
     .select('*', { count: 'exact', head: true })
     .eq('user_id', user.id)
 
-  const { data: subscription } = await supabase
-    .from('subscriptions')
-    .select('status')
+  const isFirstGeneration = (count ?? 0) === 0
+
+  const { data: credits } = await supabase
+    .from('credits')
+    .select('remaining_generations, is_unlimited')
     .eq('user_id', user.id)
-    .eq('status', 'active')
     .maybeSingle()
 
-  const isPaid = !!subscription
-  const usedFreeGeneration = (count ?? 0) >= 1
+  const isUnlimited = credits?.is_unlimited ?? false
+  const remainingGenerations = credits?.remaining_generations ?? 0
 
-  if (usedFreeGeneration && !isPaid) {
+  const canGenerate = isFirstGeneration || isUnlimited || remainingGenerations > 0
+
+  if (!canGenerate) {
     return NextResponse.json({ error: 'Upgrade required' }, { status: 403 })
   }
+
+  const shouldDeductCredit = !isFirstGeneration && !isUnlimited && remainingGenerations > 0
 
   try {
     const completion = await openai.chat.completions.create({
@@ -98,8 +103,15 @@ Respond ONLY in JSON with exactly two fields: optimizedResume and coverLetter. B
         cover_letter: coverLetter,
       })
 
-    if (insertError) {
+if (insertError) {
       return NextResponse.json({ error: 'Failed to save generation' }, { status: 500 })
+    }
+
+    if (shouldDeductCredit) {
+      await supabase
+        .from('credits')
+        .update({ remaining_generations: remainingGenerations - 1 })
+        .eq('user_id', user.id)
     }
 
     return NextResponse.json({ optimizedResume, coverLetter })
