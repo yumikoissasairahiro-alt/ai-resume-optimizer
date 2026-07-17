@@ -202,16 +202,22 @@ export default function GeneratePage() {
             Upgrade to keep generating optimized resumes and cover letters.
           </p>
           <Link
-            href={process.env.NEXT_PUBLIC_STRIPE_STANDARD_LINK || '#'}
-            className="block w-full bg-black text-white rounded-md py-2 px-4 hover:bg-gray-800 transition mb-3"
+            href={process.env.NEXT_PUBLIC_STRIPE_SINGLE_LINK || '#'}
+            className="block w-full border border-gray-300 rounded-md py-2 px-4 hover:bg-gray-50 transition mb-3"
           >
-            Upgrade - $19/month
+            Single - $9 (1 generation)
+          </Link>
+          <Link
+            href={process.env.NEXT_PUBLIC_STRIPE_PACK_LINK || '#'}
+            className="block w-full border border-gray-300 rounded-md py-2 px-4 hover:bg-gray-50 transition mb-3"
+          >
+            Job Search Pack - $19 (5 generations)
           </Link>
           <Link
             href={process.env.NEXT_PUBLIC_STRIPE_UNLIMITED_LINK || '#'}
-            className="block w-full border border-gray-300 rounded-md py-2 px-4 hover:bg-gray-50 transition"
+            className="block w-full bg-black text-white rounded-md py-2 px-4 hover:bg-gray-800 transition"
           >
-            Upgrade - $39/month (Unlimited)
+            Monthly Unlimited - $15/month
           </Link>
         </div>
       </div>
