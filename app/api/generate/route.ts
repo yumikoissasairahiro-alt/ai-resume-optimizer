@@ -1,6 +1,12 @@
 import { createClient } from '@/lib/supabase/server'
+import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import OpenAI from 'openai'
+
+const supabaseAdmin = createAdminClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
 
@@ -103,15 +109,15 @@ Respond ONLY in JSON with exactly two fields: optimizedResume and coverLetter. B
         cover_letter: coverLetter,
       })
 
-if (insertError) {
-      return NextResponse.json({ error: 'Failed to save generation' }, { status: 500 })
-    }
-
-    if (shouldDeductCredit) {
-      await supabase
+if (shouldDeductCredit) {
+      const { error: creditError } = await supabaseAdmin
         .from('credits')
         .update({ remaining_generations: remainingGenerations - 1 })
         .eq('user_id', user.id)
+
+      if (creditError) {
+        console.error('Failed to deduct credit:', creditError)
+      }
     }
 
     return NextResponse.json({ optimizedResume, coverLetter })
