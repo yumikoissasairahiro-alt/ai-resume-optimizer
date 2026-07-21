@@ -51,6 +51,13 @@ export default async function Home() {
         </div>
       </section>
 
+      <div className="max-w-3xl mx-auto px-6 pb-16 grid sm:grid-cols-2 gap-6">
+        <img src="/1screenshot-login.png" alt="Login screen" className="rounded-lg shadow-lg border" />
+        <img src="/2screenshot-resume.png" alt="Resume saved screen" className="rounded-lg shadow-lg border" />
+        <img src="/3screenshot-generate.png" alt="Generate screen" className="rounded-lg shadow-lg border" />
+        <img src="/4screenshot-result.png" alt="AI-generated tailored resume result" className="rounded-lg shadow-lg border" />
+      </div>
+
       {/* Pricing */}
       <section className="max-w-3xl mx-auto px-6 py-16">
         <h2 className="text-2xl font-semibold text-center mb-10">Simple pricing</h2>
